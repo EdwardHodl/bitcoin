@@ -50,9 +50,13 @@ enum class TxValidationResult {
      * Tx already in mempool or conflicts with a tx in the chain
      * (if it conflicts with another tx in mempool, we use MEMPOOL_POLICY as it failed to reach the RBF threshold)
      * Currently this is only used if the transaction already exists in the mempool or on chain.
+     * Duplicate.
      */
     TX_CONFLICT,
-    TX_MEMPOOL_POLICY,        //!< violated mempool's fee/size/descendant/RBF/etc limits
+    TX_MEMPOOL_REPLACEMENT_POLICY, //!< violated mempool's replaceability (RBF) limits
+    TX_MEMPOOL_RELAYFEE_POLICY, //!< violated mempool's relay fee limits
+    TX_MEMPOOL_SIZE_POLICY, //!< violated mempool's size limits
+    TX_MEMPOOL_PACKAGE_POLICY, //!< violated mempool's descendant/package limits
     TX_NO_MEMPOOL,            //!< this node does not have a mempool so can't validate the transaction
 };
 

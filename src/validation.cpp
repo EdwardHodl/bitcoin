@@ -635,11 +635,11 @@ private:
         AssertLockHeld(m_pool.cs);
         CAmount mempoolRejectFee = m_pool.GetMinFee().GetFee(package_size);
         if (mempoolRejectFee > 0 && package_fee < mempoolRejectFee) {
-            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "mempool min fee not met", strprintf("%d < %d", package_fee, mempoolRejectFee));
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY, "mempool min fee not met", strprintf("%d < %d", package_fee, mempoolRejectFee));
         }
 
         if (package_fee < m_pool.m_min_relay_feerate.GetFee(package_size)) {
-            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "min relay fee not met",
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY, "min relay fee not met",
                                  strprintf("%d < %d", package_fee, m_pool.m_min_relay_feerate.GetFee(package_size)));
         }
         return true;
@@ -720,7 +720,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         if (ptxConflicting) {
             if (!args.m_allow_replacement) {
                 // Transaction conflicts with a mempool tx, but we're not allowing replacements.
-                return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "bip125-replacement-disallowed");
+                return state.Invalid(TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY, "bip125-replacement-disallowed");
             }
             if (!ws.m_conflicts.count(ptxConflicting->GetHash()))
             {
@@ -735,7 +735,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
                 // If replaceability signaling is ignored due to node setting,
                 // replacement is always allowed.
                 if (!m_pool.m_full_rbf && !SignalsOptInRBF(*ptxConflicting)) {
-                    return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "txn-mempool-conflict");
+                    return state.Invalid(TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY, "non-bip125-txn-replacement-disallowed");
                 }
 
                 ws.m_conflicts.insert(ptxConflicting->GetHash());
@@ -896,7 +896,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
                 !m_pool.CalculateMemPoolAncestors(*entry, ws.m_ancestors,
                                                   cpfp_carve_out_limits,
                                                   dummy_err_string)) {
-            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "too-long-mempool-chain", errString);
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_PACKAGE_POLICY, "too-long-mempool-chain", errString);
         }
     }
 
@@ -934,17 +934,17 @@ bool MemPoolAccept::ReplacementChecks(Workspace& ws)
     //   descendant transaction of a direct conflict to pay a higher feerate than the transaction that
     //   might replace them, under these rules.
     if (const auto err_string{PaysMoreThanConflicts(ws.m_iters_conflicting, newFeeRate, hash)}) {
-        return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "insufficient fee", *err_string);
+        return state.Invalid(TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY, "insufficient fee", *err_string);
     }
 
     // Calculate all conflicting entries and enforce Rule #5.
     if (const auto err_string{GetEntriesForConflicts(tx, m_pool, ws.m_iters_conflicting, ws.m_all_conflicting)}) {
-        return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY,
+        return state.Invalid(TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY,
                              "too many potential replacements", *err_string);
     }
     // Enforce Rule #2.
     if (const auto err_string{HasNoNewUnconfirmed(tx, m_pool, ws.m_iters_conflicting)}) {
-        return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY,
+        return state.Invalid(TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY,
                              "replacement-adds-unconfirmed", *err_string);
     }
     // Check if it's economically rational to mine this transaction rather than the ones it
@@ -955,7 +955,7 @@ bool MemPoolAccept::ReplacementChecks(Workspace& ws)
     }
     if (const auto err_string{PaysForRBF(ws.m_conflicting_fees, ws.m_modified_fees, ws.m_vsize,
                                          m_pool.m_incremental_relay_feerate, hash)}) {
-        return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "insufficient fee", *err_string);
+        return state.Invalid(TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY, "insufficient fee", *err_string);
     }
     return true;
 }
@@ -1080,7 +1080,7 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     if (!args.m_package_submission && !bypass_limits) {
         LimitMempoolSize(m_pool, m_active_chainstate.CoinsTip());
         if (!m_pool.exists(GenTxid::Txid(hash)))
-            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "mempool full");
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_SIZE_POLICY, "mempool full");
     }
     return true;
 }
@@ -1152,7 +1152,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
             GetMainSignals().TransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence());
         } else {
             all_submitted = false;
-            ws.m_state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "mempool full");
+            ws.m_state.Invalid(TxValidationResult::TX_MEMPOOL_SIZE_POLICY, "mempool full");
             results.emplace(ws.m_ptx->GetWitnessHash(), MempoolAcceptResult::Failure(ws.m_state));
         }
     }
@@ -1368,7 +1368,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptPackage(const Package& package, 
                 // in package validation, because its fees should only be "used" once.
                 assert(m_pool.exists(GenTxid::Wtxid(wtxid)));
                 results.emplace(wtxid, single_res);
-            } else if (single_res.m_state.GetResult() != TxValidationResult::TX_MEMPOOL_POLICY &&
+            } else if (single_res.m_state.GetResult() != TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY &&
                        single_res.m_state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
                 // Package validation policy only differs from individual policy in its evaluation
                 // of feerate. For example, if a transaction fails here due to violation of a
