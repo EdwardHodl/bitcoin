@@ -1715,8 +1715,13 @@ bool PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationStat
     case TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY: // TX has violated fee limits
     case TxValidationResult::TX_MEMPOOL_SIZE_POLICY: // TX has violated size limits
     case TxValidationResult::TX_MEMPOOL_PACKAGE_POLICY: // TX has violated TX package limits
-    case TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY: // TX has violated replacement policies
         break;
+    case TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY: // TX has violated replacement policies
+        if (peer) {
+            LogPrint(BCLog::NET, "Mempool replacement policy validation failed from peer %d\n", nodeid);
+            Misbehaving(*peer, 10, message);
+        }
+        return true;
     }
     if (message != "") {
         LogPrint(BCLog::NET, "peer=%d: %s\n", nodeid, message);
