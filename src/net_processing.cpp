@@ -1709,11 +1709,11 @@ bool PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationStat
     case TxValidationResult::TX_WITNESS_MUTATED:
     case TxValidationResult::TX_WITNESS_STRIPPED:
     case TxValidationResult::TX_CONFLICT: // i.e. Duplicate
-    case TxValidationResult::TX_NO_MEMPOOL:
         break;
     // Mempool Policies
+    case TxValidationResult::TX_NO_MEMPOOL:
+    case TxValidationResult::TX_MEMPOOL_SIZE_POLICY: // TX would evicted because the mempool is full or size is too small
     case TxValidationResult::TX_MEMPOOL_RELAYFEE_POLICY: // TX has violated fee limits
-    case TxValidationResult::TX_MEMPOOL_SIZE_POLICY: // TX has violated size limits
     case TxValidationResult::TX_MEMPOOL_PACKAGE_POLICY: // TX has violated TX package limits
         break;
     case TxValidationResult::TX_MEMPOOL_REPLACEMENT_POLICY: // TX has violated replacement policies
